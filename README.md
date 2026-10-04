@@ -130,6 +130,15 @@ Each game stores a `GameRules` object, chosen in the New game dialog and fixed f
 - Import parses only the first game in the file. The import is fully validated before it replaces the current game; if it fails, the current game is unchanged.
 - **Imported games are untimed**, because PGN cannot restore clock checkpoints. A PGN with result `*` becomes a playable game. A PGN with a final result loads as a finished game for review (`recorded-result`), unless the moves themselves end the game, in which case the rule-based outcome is used.
 
+## Phone and tablet layout
+
+On phones and portrait tablets (narrower than 760px, or taller than wide), the game screen works like the Chess.com app: it fills the screen and the page never scrolls. Wider-than-tall screens from 760px use the side-by-side layout (board plus a side panel with the move list), so no layout puts the moves below the board. The move list keeps the current move visible by scrolling only its own box, never the page.
+
+- From top to bottom: a horizontally scrolling move list, the opponent's bar, the board edge to edge, your bar, a one-line status with the rules name and time control, and a bottom toolbar (New, Undo when takebacks are on, Back, Forward, Claim draw when available, More).
+- The board is sized from the space left after both player bars, using container query units, so the bars stay attached to it and any spare height goes above and below the group.
+- **More** opens a bottom sheet with the remaining actions (flip, pause/resume, draw, resign, PGN) and the rules summary.
+- Errors and save warnings appear as pop-ups above the toolbar instead of pushing the layout down. The layout respects the phone's safe areas (notch and home indicator).
+
 ## Accessibility
 
 - The board is an ARIA grid with a roving tabindex. Arrow keys follow the board's orientation, Enter/Space selects and moves, and Escape clears the selection or cancels a drag.
