@@ -15,6 +15,7 @@ export type IconName =
   | 'last'
   | 'settings'
   | 'info'
+  | 'more'
 
 const PATHS: Record<IconName, string> = {
   plus: 'M10 4v12M4 10h12',
@@ -32,6 +33,7 @@ const PATHS: Record<IconName, string> = {
   last: 'M15 4v12M5 4l6 6-6 6',
   settings: 'M10 7a3 3 0 110 6 3 3 0 010-6zM10 1v3M10 16v3M1 10h3M16 10h3M3.6 3.6l2.1 2.1M14.3 14.3l2.1 2.1M3.6 16.4l2.1-2.1M14.3 5.7l2.1-2.1',
   info: 'M10 2a8 8 0 110 16 8 8 0 010-16zM10 9v5M10 6v.5',
+  more: 'M4 10h.01M10 10h.01M16 10h.01',
 }
 
 defineProps<{ name: IconName }>()
