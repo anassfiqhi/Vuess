@@ -7,8 +7,22 @@ async function move(page: Page, from: string, to: string) {
   await sq(page, to).click()
 }
 
+/**
+ * Clicks a game action. On phones, actions that are not in the bottom
+ * toolbar live in the "More options" sheet.
+ */
+async function action(page: Page, name: string) {
+  const direct = page.getByRole('button', { name, exact: true })
+  if ((await direct.count()) > 0 && (await direct.first().isVisible())) {
+    await direct.first().click()
+    return
+  }
+  await page.getByRole('button', { name: 'More options' }).click()
+  await page.getByRole('dialog', { name: 'Game' }).getByRole('button', { name, exact: true }).click()
+}
+
 async function importPgn(page: Page, pgn: string) {
-  await page.getByRole('button', { name: 'PGN' }).click()
+  await action(page, 'PGN')
   await page.getByLabel('PGN to import').fill(pgn)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
 }
@@ -116,7 +130,7 @@ test('undo and redo', async ({ page }) => {
   await move(page, 'e7', 'e5')
   await page.getByRole('button', { name: 'Undo' }).click()
   await expect(sq(page, 'e7')).toHaveAttribute('aria-label', /black pawn/)
-  await page.getByRole('button', { name: 'Redo' }).click()
+  await action(page, 'Redo')
   await expect(sq(page, 'e5')).toHaveAttribute('aria-label', /black pawn/)
 })
 
@@ -142,7 +156,7 @@ test('timed games restore paused and resume on request', async ({ page }) => {
 
 test('PGN export, failed import keeps the game, valid import replaces it', async ({ page }) => {
   await move(page, 'e2', 'e4')
-  await page.getByRole('button', { name: 'PGN' }).click()
+  await action(page, 'PGN')
   await expect(page.getByLabel('PGN of the current game')).toHaveValue(/1\. e4 \*/)
   await page.getByLabel('PGN to import').fill('1. e4 e5 2. Ke3')
   await page.getByRole('button', { name: 'Import', exact: true }).click()
@@ -190,7 +204,7 @@ test('rules: strict hides takebacks and hints, and shows what it includes', asyn
   await expect(setup.getByLabel('Allow takebacks')).toHaveCount(0)
   await setup.getByRole('button', { name: 'Start game' }).click()
 
-  await expect(page.getByText('Strict · Untimed')).toBeVisible()
+  await expect(page.getByTestId('rules-meta')).toContainText('Strict · Untimed')
   await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0)
   await sq(page, 'e2').click()
   await expect(sq(page, 'e4')).toHaveAttribute('aria-label', 'e4, empty')
@@ -200,7 +214,7 @@ test('rules: strict hides takebacks and hints, and shows what it includes', asyn
   await expect(sq(page, 'e4')).toHaveAttribute('aria-label', /white pawn/)
 
   await page.reload()
-  await expect(page.getByText('Strict · Untimed')).toBeVisible()
+  await expect(page.getByTestId('rules-meta')).toContainText('Strict · Untimed')
 })
 
 test('rules: Customized rules is its own choice and is remembered', async ({ page }) => {
@@ -211,7 +225,7 @@ test('rules: Customized rules is its own choice and is remembered', async ({ pag
   await expect(setup.getByTestId('custom-rules')).toBeVisible()
   await setup.getByLabel('Allow takebacks').check()
   await setup.getByRole('button', { name: 'Start game' }).click()
-  await expect(page.getByText('Customized rules · Untimed')).toBeVisible()
+  await expect(page.getByTestId('rules-meta')).toContainText('Customized rules · Untimed')
   await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible()
 
   await page.getByRole('button', { name: 'New game' }).click()
@@ -239,7 +253,7 @@ test('rules: en passant can be switched off', async ({ page }) => {
   await setup.getByText('Customized rules', { exact: true }).click()
   await setup.getByLabel('En passant').uncheck()
   await setup.getByRole('button', { name: 'Start game' }).click()
-  await expect(page.getByText('Customized rules · Untimed')).toBeVisible()
+  await expect(page.getByTestId('rules-meta')).toContainText('Customized rules · Untimed')
   await move(page, 'e2', 'e4')
   await move(page, 'a7', 'a6')
   await move(page, 'e4', 'e5')
@@ -252,7 +266,7 @@ test('rules: en passant can be switched off', async ({ page }) => {
 })
 
 test('rules: new games default to Chess.com style', async ({ page }) => {
-  await expect(page.getByText('Chess.com style · Untimed')).toBeVisible()
+  await expect(page.getByTestId('rules-meta')).toContainText('Chess.com style · Untimed')
   await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0)
   await page.getByRole('button', { name: 'New game' }).click()
   const setup = page.getByRole('dialog', { name: 'New game' })
@@ -261,4 +275,112 @@ test('rules: new games default to Chess.com style', async ({ page }) => {
   await setup.getByRole('button', { name: 'Start game' }).click()
   await page.getByRole('button', { name: 'New game' }).click()
   await expect(setup.getByRole('radio', { name: /Chess.com style/ })).toBeChecked()
+})
+
+test('phones: the game fills the screen without scrolling', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Phone layout')
+  await move(page, 'e2', 'e4')
+  const layout = await page.evaluate(() => {
+    const board = document.querySelector('[role="grid"]')!.getBoundingClientRect()
+    return {
+      verticalScroll: document.documentElement.scrollHeight - window.innerHeight,
+      boardWidth: board.width,
+      viewportWidth: window.innerWidth,
+    }
+  })
+  expect(layout.verticalScroll).toBeLessThanOrEqual(0)
+  expect(layout.boardWidth).toBeGreaterThan(layout.viewportWidth * 0.95)
+  await expect(page.getByRole('navigation', { name: 'Game actions' })).toBeVisible()
+  await page.getByRole('button', { name: 'Previous move' }).click()
+  await expect(page.getByText('Viewing move 0 of 1')).toBeVisible()
+  await page.getByRole('button', { name: 'Back to live game' }).click()
+  await page.getByRole('button', { name: 'More options' }).click()
+  await expect(page.getByRole('dialog', { name: 'Game' }).getByRole('button', { name: 'Resign' })).toBeVisible()
+})
+
+test('portrait tablets use the full-screen layout without scrolling', async ({ browser }) => {
+  for (const viewport of [
+    { width: 768, height: 1024 },
+    { width: 820, height: 1180 },
+    { width: 1024, height: 1366 },
+  ]) {
+    const page = await browser.newPage({ viewport })
+    await page.goto('/')
+    await expect(page.getByRole('navigation', { name: 'Game actions' })).toBeVisible()
+    const verticalScroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
+    expect(verticalScroll, `${viewport.width}x${viewport.height}`).toBeLessThanOrEqual(0)
+    await page.close()
+  }
+})
+
+test('landscape tablets keep the side-by-side layout', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1024, height: 768 } })
+  await page.goto('/')
+  await expect(page.getByRole('navigation', { name: 'Game actions' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Moves' })).toBeVisible()
+  await page.close()
+})
+
+test('phones: playing, dragging and swiping never scroll the page', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Phone layout')
+  await expect(page.locator('html')).toHaveClass(/page-locked/)
+  await move(page, 'e2', 'e4')
+  await move(page, 'e7', 'e5')
+  // Touch swipe that starts on an empty square, plus a dispatched touch drag of a piece.
+  const empty = (await sq(page, 'd4').boundingBox())!
+  await page.touchscreen.tap(empty.x + 5, empty.y + 5)
+  await page.mouse.wheel(0, 600)
+  const knight = (await sq(page, 'g1').boundingBox())!
+  const target = (await sq(page, 'f3').boundingBox())!
+  await page.mouse.move(knight.x + knight.width / 2, knight.y + knight.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect(sq(page, 'f3')).toHaveAttribute('aria-label', /white knight/)
+  const state = await page.evaluate(() => ({
+    scrollY: window.scrollY,
+    scrollable: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    overflowY: getComputedStyle(document.documentElement).overflowY,
+  }))
+  expect(state.scrollY).toBe(0)
+  expect(state.overflowY).toBe('hidden')
+  expect(state.scrollable).toBeLessThanOrEqual(0)
+})
+
+test('leaving the game page unlocks scrolling again', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Phone layout')
+  await expect(page.locator('html')).toHaveClass(/page-locked/)
+  await page.getByRole('link', { name: 'Help' }).click()
+  await expect(page.getByRole('heading', { name: 'Rules & help' })).toBeVisible()
+  await expect(page.locator('html')).not.toHaveClass(/page-locked/)
+  await page.mouse.wheel(0, 800)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+})
+
+test('playing moves never scrolls the page to the move list', async ({ browser }) => {
+  // Layouts where the page or panels could scroll: short desktop, portrait tablet, phone.
+  for (const viewport of [
+    { width: 1280, height: 620 },
+    { width: 900, height: 700 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 700 },
+  ]) {
+    const page = await browser.newPage({ viewport })
+    await page.goto('/')
+    await page.evaluate(() => localStorage.clear())
+    await page.reload()
+    const line = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'g8f6', 'b1c3', 'f8c5', 'd2d3', 'd7d6', 'c1g5', 'h7h6']
+    for (const m of line) await move(page, m.slice(0, 2), m.slice(2, 4))
+    const scrolled = await page.evaluate(() => {
+      const offsets = [window.scrollY]
+      for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+        if (el.closest('.strip, .history')) continue // the move list itself may scroll
+        if (el.scrollTop > 0) offsets.push(el.scrollTop)
+      }
+      return Math.max(...offsets)
+    })
+    expect(scrolled, `${viewport.width}x${viewport.height}`).toBe(0)
+    await expect(page.getByRole('button', { name: 'Move 6, black: h6' })).toBeInViewport()
+    await page.close()
+  }
 })
