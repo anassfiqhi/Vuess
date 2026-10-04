@@ -12,8 +12,10 @@ const props = withDefaults(
     /** Whether Escape / backdrop click may dismiss the dialog. */
     dismissible?: boolean
     size?: 'sm' | 'md'
+    /** Show as a sheet attached to the bottom of the screen on phones. */
+    sheet?: boolean
   }>(),
-  { dismissible: true, size: 'md' },
+  { dismissible: true, size: 'md', sheet: false },
 )
 const emit = defineEmits<{ cancel: [] }>()
 
@@ -38,7 +40,7 @@ function hide(): void {
   if (!el?.open) return
   if (typeof el.close === 'function') el.close()
   else el.removeAttribute('open')
-  if (opener?.isConnected) opener.focus()
+  if (opener?.isConnected) opener.focus({ preventScroll: true })
   opener = null
 }
 
@@ -65,7 +67,7 @@ function onBackdropClick(event: MouseEvent): void {
   <dialog
     ref="dialog"
     class="dialog"
-    :class="`dialog--${size}`"
+    :class="[`dialog--${size}`, { 'dialog--sheet': sheet }]"
     :aria-labelledby="titleId"
     @cancel="onCancel"
     @click="onBackdropClick"
@@ -100,6 +102,25 @@ function onBackdropClick(event: MouseEvent): void {
 }
 .dialog--sm {
   width: min(100% - 2rem, 22rem);
+}
+/* Compact layout (phones and portrait tablets); keep in sync with isCompact in GameView.vue. */
+@media (max-width: 759px), (max-aspect-ratio: 1/1) {
+  .dialog--sheet {
+    width: 100%;
+    max-width: none;
+    max-height: 85dvh;
+    margin: auto 0 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .dialog--sheet[open] {
+    animation: sheet-in var(--motion-ui) ease-out;
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
 }
 .dialog::backdrop {
   background: rgb(10 12 16 / 0.55);
