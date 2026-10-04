@@ -56,7 +56,8 @@ const focusSquare = ref<Square>(props.orientation === 'w' ? 'e2' : 'e7')
 
 function focusOn(square: Square): void {
   focusSquare.value = square
-  boardEl.value?.querySelector<HTMLElement>(`[data-square="${square}"]`)?.focus()
+  // preventScroll: moving focus between squares must never scroll the page.
+  boardEl.value?.querySelector<HTMLElement>(`[data-square="${square}"]`)?.focus({ preventScroll: true })
 }
 
 const ARROWS: Record<string, [number, number]> = {
