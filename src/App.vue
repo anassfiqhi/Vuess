@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import { useGameRuntime } from '@/features/chess/composables/useGameRuntime'
 
 useGameRuntime()
+const route = useRoute()
 </script>
 
 <template>
@@ -24,7 +25,7 @@ useGameRuntime()
       <RouterLink to="/about" class="app-nav__link"><AppIcon name="info" /><span>Help</span></RouterLink>
     </nav>
   </header>
-  <main id="main" class="app-main" tabindex="-1">
+  <main id="main" class="app-main" :class="{ 'app-main--fill': route.meta.fill }" tabindex="-1">
     <RouterView />
   </main>
 </template>

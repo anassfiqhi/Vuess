@@ -38,6 +38,9 @@
 
   --motion-ui: 160ms;
   --motion-move: 160ms;
+  --header-h: 3.5rem;
+  /* Full header height including the notch area on phones. */
+  --header-total: calc(var(--header-h) + env(safe-area-inset-top, 0px));
 
   --sans: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
@@ -105,6 +108,13 @@
 html {
   -webkit-text-size-adjust: 100%;
 }
+/* Set by the full-screen game layout; see GameView.vue. */
+html.page-locked,
+html.page-locked body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 body {
   margin: 0;
   min-width: 320px;
@@ -163,8 +173,9 @@ kbd {
   justify-content: space-between;
   gap: 1rem;
   max-width: 76rem;
+  height: var(--header-h);
   margin: 0 auto;
-  padding: 0.75rem 1rem;
+  padding: 0 1rem;
 }
 .brand {
   display: inline-flex;
@@ -209,10 +220,24 @@ kbd {
   padding: 0 1rem 2rem;
   outline: none;
 }
-@media (max-width: 480px) {
-  .app-header {
-    padding: 0.6rem 0.75rem;
+@media (max-width: 759px) {
+  :root {
+    --header-h: 3rem;
   }
+  .app-header {
+    padding: 0 0.75rem;
+    padding-top: env(safe-area-inset-top);
+    height: calc(var(--header-h) + env(safe-area-inset-top));
+  }
+}
+/* Compact layout (phones and portrait tablets): pages that fill the screen get no padding.
+   Keep in sync with isCompact in GameView.vue. */
+@media (max-width: 759px), (max-aspect-ratio: 1/1) {
+  .app-main.app-main--fill {
+    padding: 0;
+  }
+}
+@media (max-width: 480px) {
   .app-main {
     padding: 0 0.75rem 1.5rem;
   }
