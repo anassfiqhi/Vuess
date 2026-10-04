@@ -15,7 +15,8 @@ const props = withDefaults(defineProps<{
   clockRunning: boolean
   toMove: boolean
   showMaterial?: boolean
-}>(), { showMaterial: true })
+  compact?: boolean
+}>(), { showMaterial: true, compact: false })
 
 const ORDER: PieceType[] = ['q', 'r', 'b', 'n', 'p']
 const sortedCaptures = computed(() =>
@@ -26,7 +27,7 @@ const displayName = computed(() => props.name || colorName(props.color))
 </script>
 
 <template>
-  <section class="player" :class="{ 'player--to-move': toMove }" :aria-label="`${colorName(color)} player`">
+  <section class="player" :class="{ 'player--to-move': toMove, 'player--compact': compact }" :aria-label="`${colorName(color)} player`">
     <span class="player__swatch" :class="`player__swatch--${color}`" aria-hidden="true" />
     <div class="player__info">
       <p class="player__name">
@@ -57,6 +58,20 @@ const displayName = computed(() => props.name || colorName(props.color))
   border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--border);
+}
+/* Phones: a flat bar like the Chess.com app; the side to move is marked by the badge and clock. */
+.player--compact {
+  min-height: 2.75rem;
+  padding: 0.25rem 0.75rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.player--compact .player__captures {
+  min-height: 0;
+}
+.player--compact.player--to-move {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .player--to-move {
   border-color: var(--accent);
