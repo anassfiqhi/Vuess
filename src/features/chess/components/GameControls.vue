@@ -10,6 +10,8 @@ defineProps<{
   /** False when the board rotates automatically each turn. */
   canFlip: boolean
   isOver: boolean
+  /** Hidden against the computer, which never agrees to a draw. */
+  canAgreeDraw?: boolean
   isTimed: boolean
   isPaused: boolean
   isClockRunning: boolean
@@ -50,7 +52,9 @@ const emit = defineEmits<{
     <button v-if="canClaimDraw" type="button" class="button button--primary" @click="emit('claim-draw')">
       <AppIcon name="handshake" />Claim draw
     </button>
-    <button type="button" class="button" :disabled="isOver" @click="emit('draw')"><AppIcon name="handshake" />Draw</button>
+    <button v-if="canAgreeDraw !== false" type="button" class="button" :disabled="isOver" @click="emit('draw')">
+      <AppIcon name="handshake" />Draw
+    </button>
     <button type="button" class="button" :disabled="isOver" @click="emit('resign')"><AppIcon name="flag" />Resign</button>
     <button type="button" class="button" @click="emit('pgn')"><AppIcon name="file" />PGN</button>
   </div>

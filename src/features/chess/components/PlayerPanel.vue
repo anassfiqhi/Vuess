@@ -14,9 +14,13 @@ const props = withDefaults(defineProps<{
   clockMs: number | null
   clockRunning: boolean
   toMove: boolean
+  /** The computer is choosing its move. */
+  thinking?: boolean
+  /** Online: the player has lost their connection. */
+  offline?: boolean
   showMaterial?: boolean
   compact?: boolean
-}>(), { showMaterial: true, compact: false })
+}>(), { showMaterial: true, compact: false, thinking: false, offline: false })
 
 const ORDER: PieceType[] = ['q', 'r', 'b', 'n', 'p']
 const sortedCaptures = computed(() =>
@@ -32,7 +36,9 @@ const displayName = computed(() => props.name || colorName(props.color))
     <div class="player__info">
       <p class="player__name">
         {{ displayName }}
-        <span v-if="toMove" class="badge">To move</span>
+        <span v-if="offline" class="badge badge--offline" role="status">Offline</span>
+        <span v-if="thinking" class="badge badge--thinking" role="status">Thinking…</span>
+        <span v-else-if="toMove" class="badge">To move</span>
       </p>
       <p v-if="showMaterial" class="player__captures" :aria-label="`Captured: ${captured.length ? captured.length + ' pieces' : 'none'}`">
         <ChessPiece
@@ -120,6 +126,23 @@ const displayName = computed(() => props.name || colorName(props.color))
   margin-left: 0.55rem;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+.badge--offline {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.badge--thinking {
+  animation: badge-pulse 1.2s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge--thinking {
+    animation: none;
+  }
 }
 .badge {
   padding: 0.05rem 0.4rem;

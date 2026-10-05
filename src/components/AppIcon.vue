@@ -16,6 +16,8 @@ export type IconName =
   | 'settings'
   | 'info'
   | 'more'
+  | 'link'
+  | 'globe'
 
 const PATHS: Record<IconName, string> = {
   plus: 'M10 4v12M4 10h12',
@@ -34,6 +36,8 @@ const PATHS: Record<IconName, string> = {
   settings: 'M10 7a3 3 0 110 6 3 3 0 010-6zM10 1v3M10 16v3M1 10h3M16 10h3M3.6 3.6l2.1 2.1M14.3 14.3l2.1 2.1M3.6 16.4l2.1-2.1M14.3 5.7l2.1-2.1',
   info: 'M10 2a8 8 0 110 16 8 8 0 010-16zM10 9v5M10 6v.5',
   more: 'M4 10h.01M10 10h.01M16 10h.01',
+  link: 'M8.5 11.5l3-3M7 9.5l-1.8 1.8a2.8 2.8 0 004 4L11 13.5M13 10.5l1.8-1.8a2.8 2.8 0 00-4-4L9 6.5',
+  globe: 'M10 2a8 8 0 110 16 8 8 0 010-16zM2 10h16M10 2c2.6 2.6 2.6 13.4 0 16M10 2c-2.6 2.6-2.6 13.4 0 16',
 }
 
 defineProps<{ name: IconName }>()

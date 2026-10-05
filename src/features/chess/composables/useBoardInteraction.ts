@@ -7,7 +7,8 @@ export interface BoardInteractionOptions {
   canInteract: Ref<boolean>
   /** Promote straight to a queen instead of asking. */
   autoQueen?: Ref<boolean>
-  submitMove: (input: MoveInput) => Result<RecordedMove>
+  /** Online games answer asynchronously, once the server has decided. */
+  submitMove: (input: MoveInput) => Result<RecordedMove> | Promise<Result<RecordedMove>>
   onMoveAccepted?: (move: RecordedMove) => void
   onMoveRejected?: (error: string) => void
 }
@@ -47,10 +48,14 @@ export function useBoardInteraction(options: BoardInteractionOptions) {
   }
 
   function submit(input: MoveInput): void {
-    const result = options.submitMove(input)
+    const outcome = options.submitMove(input)
     clear()
-    if (result.ok) options.onMoveAccepted?.(result.value)
-    else options.onMoveRejected?.(result.error)
+    const handle = (result: Result<RecordedMove>) => {
+      if (result.ok) options.onMoveAccepted?.(result.value)
+      else options.onMoveRejected?.(result.error)
+    }
+    if (outcome instanceof Promise) void outcome.then(handle)
+    else handle(outcome)
   }
 
   /** Request a move; opens the promotion step instead of committing a partial move. */
