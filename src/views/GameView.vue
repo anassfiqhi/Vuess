@@ -341,7 +341,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
           <p class="status-line__text">Viewing move {{ shownPly }} of {{ record.cursor }}</p>
           <button
             type="button"
-            class="button button--small button--primary"
+            class="button button--primary status-line__live"
             aria-label="Back to live game"
             @click="viewPly = null"
           >
@@ -679,6 +679,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
   justify-content: space-between;
   gap: 0.75rem;
   min-height: 2rem;
+  height: 2rem;
   padding: 0.2rem 0.75rem;
   border-top: 1px solid var(--border);
   background: var(--surface);
@@ -694,6 +695,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
   color: var(--text-strong);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Short enough to fit the status line, so the board does not shift when browsing history. */
+.status-line__live {
+  min-height: 1.5rem;
+  padding: 0 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1;
 }
 .status-line__meta {
   flex: none;
