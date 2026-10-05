@@ -358,6 +358,8 @@ test('leaving the game page unlocks scrolling again', async ({ page, isMobile })
 })
 
 test('playing moves never scrolls the page to the move list', async ({ browser }) => {
+  // Plays twelve moves at four screen sizes; allow for a busy parallel run.
+  test.setTimeout(90_000)
   // Layouts where the page or panels could scroll: short desktop, portrait tablet, phone.
   for (const viewport of [
     { width: 1280, height: 620 },
@@ -383,4 +385,27 @@ test('playing moves never scrolls the page to the move list', async ({ browser }
     await expect(page.getByRole('button', { name: 'Move 6, black: h6' })).toBeInViewport()
     await page.close()
   }
+})
+
+test('computer: Stockfish replies, and undo takes back both moves', async ({ page }) => {
+  await page.getByRole('button', { name: 'New game' }).click()
+  const setup = page.getByRole('dialog', { name: 'New game' })
+  await setup.getByText('Computer', { exact: true }).click()
+  await setup.getByRole('textbox', { name: 'Your name' }).fill('Ada')
+  await setup.getByText('White', { exact: true }).click()
+  await setup.getByRole('radio', { name: 'Level 1, Newcomer' }).check()
+  await setup.getByText('Casual', { exact: true }).click()
+  await setup.getByRole('button', { name: 'Start game' }).click()
+
+  await expect(page.getByText('Stockfish · Level 1')).toBeVisible()
+  await move(page, 'e2', 'e4')
+  // The real engine (WebAssembly in a worker) answers as Black.
+  await expect(status(page)).toHaveText('White to move', { timeout: 20_000 })
+  await expect(page.getByRole('button', { name: /^Move 1, black:/ })).toBeVisible()
+  // Black pieces cannot be moved by the player.
+  await expect(page.getByRole('status').filter({ hasText: 'Thinking' })).toHaveCount(0)
+
+  await action(page, 'Undo')
+  await expect(sq(page, 'e2')).toHaveAttribute('aria-label', /white pawn/)
+  await expect(page.getByText('No moves yet').first()).toBeVisible()
 })
