@@ -1,0 +1,3 @@
+allowBuilds:
+  # Its postinstall only links the 99 MB full build; Vuess loads the lite single-threaded files directly.
+  stockfish: false
