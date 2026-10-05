@@ -1,0 +1,226 @@
+/* Game screen layout shared by GameView (local games) and OnlineGameView. */
+.game {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  max-width: 76rem;
+  margin: 0 auto;
+}
+.game__notices {
+  display: grid;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+}
+.game__notices:empty {
+  display: none;
+}
+.game__board-column {
+  display: grid;
+  gap: 0.5rem;
+  /* Keep the board inside the viewport height on short desktop screens. */
+  width: min(100%, calc(100dvh - 14.5rem), 46rem);
+  min-width: min(100%, 18rem);
+  justify-self: center;
+}
+.game__board-box {
+  position: relative;
+}
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgb(12 14 18 / 0.6);
+  color: #fff;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+.board-overlay p {
+  margin: 0;
+}
+.game__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.status-bar {
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.status-bar--over {
+  border-color: var(--accent);
+}
+.status-bar__text {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.rules-summary {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+}
+.rules-summary summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.rules-summary__list {
+  margin-top: 0.4rem;
+}
+.status-bar__meta {
+  margin: 0.15rem 0 0;
+}
+.game__history {
+  flex: 1;
+  min-height: 10rem;
+}
+/* Side-by-side layout for everything that is not the compact (phone/portrait) layout. */
+@media (min-width: 760px) {
+  .game {
+    /* Board track: as large as the viewport height allows, never below a usable size. */
+    grid-template-columns: minmax(18rem, min(calc(100dvh - 14.5rem), 46rem)) 20rem;
+    justify-content: center;
+    align-items: start;
+  }
+  .game__board-column {
+    width: 100%;
+  }
+  .game__side {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100dvh - 6rem);
+  }
+}
+/* ---- Phones: full-screen game, no page scroll ------------------------------ */
+.game--compact {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: calc(100dvh - var(--header-total));
+  overflow: hidden;
+}
+.game--compact .game__notices {
+  position: absolute;
+  inset: auto 0.75rem calc(4.25rem + env(safe-area-inset-bottom, 0px)) 0.75rem;
+  z-index: 30;
+  box-shadow: var(--shadow-dialog);
+  border-radius: var(--radius-md);
+}
+/*
+ * Player bars stay attached to the board, as in the Chess.com app: the board
+ * is as large as the column allows after both bars, and any spare height is
+ * shared above and below the whole group.
+ */
+.game--compact .game__board-column {
+  --bar-h: 3rem;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+}
+.game--compact .game__board-column > .player {
+  flex: none;
+  height: var(--bar-h);
+  min-height: 0;
+}
+.game--compact .game__board-box {
+  width: min(100cqw, 100cqh - 2 * var(--bar-h));
+  margin: 0 auto;
+}
+.game--compact .game__board-box .board {
+  border-radius: 0;
+  box-shadow: none;
+  /* Every touch on the board belongs to the game, not to page scrolling. */
+  touch-action: none;
+}
+.game--compact .board-overlay {
+  border-radius: 0;
+}
+.status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2rem;
+  height: 2rem;
+  padding: 0.2rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.85rem;
+}
+.status-line--over .status-line__text {
+  color: var(--accent-strong);
+}
+.status-line__text {
+  margin: 0;
+  overflow: hidden;
+  font-weight: 600;
+  color: var(--text-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Short enough to fit the status line, so the board does not shift when browsing history. */
+.status-line__live {
+  min-height: 1.5rem;
+  padding: 0 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.status-line__meta {
+  flex: none;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.toolbar {
+  display: flex;
+  justify-content: space-around;
+  padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.toolbar__button {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 0;
+  min-height: 3.25rem;
+  padding: 0.35rem 0.25rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.toolbar__button .icon {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+.toolbar__button:active:not(:disabled) {
+  background: var(--accent-soft);
+}
+.toolbar__button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.toolbar__button--accent {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
