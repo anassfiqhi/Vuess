@@ -3,6 +3,13 @@ import GameView from '@/views/GameView.vue'
 
 export const routes = [
   { path: '/', name: 'game', component: GameView, meta: { title: 'Play', fill: true } },
+  { path: '/online', name: 'online', component: () => import('@/views/OnlineLobbyView.vue'), meta: { title: 'Online' } },
+  {
+    path: '/online/:gameId',
+    name: 'online-game',
+    component: () => import('@/views/OnlineGameView.vue'),
+    meta: { title: 'Online game', fill: true },
+  },
   { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: 'Settings' } },
   { path: '/about', name: 'about', component: () => import('@/views/AboutView.vue'), meta: { title: 'Rules & help' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },

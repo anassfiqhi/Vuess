@@ -7,13 +7,14 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ChessBoard from '@/features/chess/components/ChessBoard.vue'
 import GameControls from '@/features/chess/components/GameControls.vue'
 import GameResultDialog from '@/features/chess/components/GameResultDialog.vue'
-import GameSetupDialog from '@/features/chess/components/GameSetupDialog.vue'
+import GameSetupDialog, { type OnlineSetup } from '@/features/chess/components/GameSetupDialog.vue'
 import MoveHistory from '@/features/chess/components/MoveHistory.vue'
 import PgnDialog from '@/features/chess/components/PgnDialog.vue'
 import PlayerPanel from '@/features/chess/components/PlayerPanel.vue'
 import PromotionDialog from '@/features/chess/components/PromotionDialog.vue'
 import RulesList from '@/features/chess/components/RulesList.vue'
 import { useBoardInteraction } from '@/features/chess/composables/useBoardInteraction'
+import { useComputerStatus } from '@/features/chess/composables/useComputerPlayer'
 import { useMotionEnabled } from '@/features/chess/composables/useReducedMotion'
 import { useSound } from '@/features/chess/composables/useSound'
 import { describeTimeControl } from '@/features/chess/services/clock'
@@ -21,8 +22,10 @@ import { rulesLabel } from '@/features/chess/services/gameRules'
 import { colorName, describeOutcome } from '@/features/chess/services/outcomeText'
 import { useGameStore, type GameSetup } from '@/features/chess/stores/game'
 import type { PieceColor, PieceType, Position, RecordedMove } from '@/features/chess/types'
-import { useMediaQuery } from '@/composables/useMediaQuery'
+import { useGameLayout } from '@/composables/useGameLayout'
+import { useOnlineStore } from '@/features/online/stores/online'
 import { useSettingsStore } from '@/stores/settings'
+import { useRouter } from 'vue-router'
 
 const game = useGameStore()
 
@@ -45,35 +48,29 @@ const {
   captured,
   restoreNotice,
   storageWarning,
+  opponent,
+  computerColor,
+  isComputerTurn,
 } = storeToRefs(game)
+const computerStatus = useComputerStatus()
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
 
-/**
- * Phones and portrait tablets get a full-screen layout like the Chess.com app:
- * no page scroll, actions in a bottom bar. Keep this query in sync with the
- * "compact layout" media queries in style.css and BaseDialog.vue.
- */
-const isCompact = useMediaQuery('(max-width: 759px), (max-aspect-ratio: 1/1)')
+const isCompact = useGameLayout()
 const moreOpen = ref(false)
-
-/*
- * The full-screen layout has nothing to scroll, so lock the page: no scrollbar
- * from sub-pixel rounding, and swipes on the board cannot move the page,
- * collapse the address bar or trigger overscroll effects.
- */
-watch(
-  isCompact,
-  (compact) => document.documentElement.classList.toggle('page-locked', compact),
-  { immediate: true },
-)
-onBeforeUnmount(() => document.documentElement.classList.remove('page-locked'))
 
 const motionEnabled = useMotionEnabled(computed(() => settings.value.animations))
 const sound = useSound(computed(() => settings.value.soundEnabled))
 
 /** With "rotate board" the side to move is always at the bottom; otherwise the saved preference. */
-const orientation = computed<PieceColor>(() => (rules.value.rotateBoard ? position.value.turn : settings.value.orientation))
+/** Rotating each turn only makes sense when two people share the device. */
+const orientation = computed<PieceColor>(() =>
+  rules.value.rotateBoard && opponent.value.kind === 'person' ? position.value.turn : settings.value.orientation,
+)
+/** Against the computer, the colour the player controls. */
+const humanColor = computed<PieceColor | null>(() =>
+  computerColor.value === null ? null : computerColor.value === 'w' ? 'b' : 'w',
+)
 
 // ---- History browsing (view state only, never persisted) -------------------
 
@@ -102,7 +99,7 @@ let animationId = 0
 
 const interaction = useBoardInteraction({
   position,
-  canInteract: computed(() => canMove.value && !viewingHistory.value),
+  canInteract: computed(() => canMove.value && !viewingHistory.value && !isComputerTurn.value),
   autoQueen: computed(() => rules.value.autoQueen),
   submitMove: (input) => game.tryMove(input),
   onMoveAccepted(move) {
@@ -124,7 +121,7 @@ const interaction = useBoardInteraction({
 const { selected, pendingPromotion, targets } = interaction
 
 const movableColor = computed<PieceColor | null>(() =>
-  canMove.value && !viewingHistory.value && !pendingPromotion.value ? position.value.turn : null,
+  canMove.value && !viewingHistory.value && !pendingPromotion.value && !isComputerTurn.value ? position.value.turn : null,
 )
 
 // ---- Players, captures, clocks --------------------------------------------
@@ -141,6 +138,7 @@ function panelFor(color: PieceColor) {
     clockMs: clocks.value ? clocks.value[color] : null,
     clockRunning: isClockRunning.value && position.value.turn === color,
     toMove: !isOver.value && position.value.turn === color,
+    thinking: computerStatus.thinking && color === computerColor.value,
     showMaterial: rules.value.showMaterial,
   }
 }
@@ -174,6 +172,7 @@ const setupDefaults = computed<GameSetup>(() => ({
   timeControl: record.value.timeControl,
   rulesChoice: record.value.rulesChoice,
   rules: record.value.rules,
+  opponent: record.value.opponent,
 }))
 const gameInProgress = computed(() => !isOver.value && record.value.moves.length > 0)
 
@@ -189,13 +188,32 @@ watch(outcome, (next, previous) => {
 function startGame(setup: GameSetup): void {
   if (setup.rulesChoice === 'custom') settingsStore.saveCustomRules(setup.rules)
   game.startGame(setup)
+  // Face the board towards the player in a game against the computer.
+  if (setup.opponent.kind === 'computer') settings.value.orientation = setup.opponent.color === 'w' ? 'b' : 'w'
   setupOpen.value = false
   resultOpen.value = false
   moveError.value = null
   announcement.value = `New game started. ${describeTimeControl(setup.timeControl)}.`
 }
 
+const router = useRouter()
+const onlineStore = useOnlineStore()
+const onlineError = ref<string | null>(null)
+
+/** "Online" in the New game dialog creates the game on the server and opens its invite screen. */
+async function startOnline(setup: OnlineSetup): Promise<void> {
+  onlineError.value = null
+  const created = await onlineStore.createGame(setup)
+  if (!created.ok) {
+    onlineError.value = `${created.error} Is vuess-server running?`
+    return
+  }
+  setupOpen.value = false
+  await router.push(`/online/${created.value}`)
+}
+
 function openNewGame(): void {
+  onlineError.value = null
   resultOpen.value = false
   setupOpen.value = true
 }
@@ -294,6 +312,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
         <p>{{ storageWarning }}</p>
       </div>
       <p v-if="isCompact && moveError" class="notice notice--error" role="alert">{{ moveError }}</p>
+      <div v-if="computerStatus.error" class="notice notice--error" role="alert">
+        <p>{{ computerStatus.error }}</p>
+        <button type="button" class="button button--small" @click="computerStatus.retry()">Try again</button>
+      </div>
     </div>
 
     <MoveHistory
@@ -404,6 +426,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
           :is-timed="isTimed"
           :is-paused="isPaused"
           :is-clock-running="isClockRunning"
+          :can-agree-draw="opponent.kind === 'person'"
           @new-game="fromSheet(openNewGame)"
           @undo="fromSheet(undo)"
           @redo="fromSheet(redo)"
@@ -451,6 +474,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
         :is-timed="isTimed"
         :is-paused="isPaused"
         :is-clock-running="isClockRunning"
+        :can-agree-draw="opponent.kind === 'person'"
         @new-game="openNewGame"
         @undo="undo"
         @redo="redo"
@@ -486,7 +510,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
       :defaults="setupDefaults"
       :custom-rules="settings.customRules"
       :replacing="gameInProgress"
+      :error="onlineError"
+      :busy="onlineStore.busy"
       @start="startGame"
+      @online="startOnline"
       @cancel="setupOpen = false"
     />
     <GameResultDialog
@@ -505,11 +532,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
       @imported="onImported"
     />
     <BaseDialog :open="resignOpen" title="Resign" size="sm" @cancel="resignOpen = false">
-      <p class="muted">Which player is resigning? This ends the game and cannot be undone.</p>
+      <p class="muted">
+        {{ humanColor ? 'Resign this game against the computer?' : 'Which player is resigning?' }} This ends the
+        game and cannot be undone.
+      </p>
       <template #actions>
         <button type="button" class="button" data-autofocus @click="resignOpen = false">Cancel</button>
-        <button type="button" class="button button--danger" @click="resign('w')">{{ colorName('w') }} resigns</button>
-        <button type="button" class="button button--danger" @click="resign('b')">{{ colorName('b') }} resigns</button>
+        <button v-if="humanColor" type="button" class="button button--danger" @click="resign(humanColor)">Resign</button>
+        <template v-else>
+          <button type="button" class="button button--danger" @click="resign('w')">{{ colorName('w') }} resigns</button>
+          <button type="button" class="button button--danger" @click="resign('b')">{{ colorName('b') }} resigns</button>
+        </template>
       </template>
     </BaseDialog>
     <ConfirmDialog
@@ -522,231 +555,3 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
     />
   </div>
 </template>
-
-<style scoped>
-.game {
-  display: grid;
-  gap: 1rem;
-  width: 100%;
-  max-width: 76rem;
-  margin: 0 auto;
-}
-.game__notices {
-  display: grid;
-  gap: 0.5rem;
-  grid-column: 1 / -1;
-}
-.game__notices:empty {
-  display: none;
-}
-.game__board-column {
-  display: grid;
-  gap: 0.5rem;
-  /* Keep the board inside the viewport height on short desktop screens. */
-  width: min(100%, calc(100dvh - 14.5rem), 46rem);
-  min-width: min(100%, 18rem);
-  justify-self: center;
-}
-.game__board-box {
-  position: relative;
-}
-.board-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 0.75rem;
-  border-radius: var(--radius-sm);
-  background: rgb(12 14 18 / 0.6);
-  color: #fff;
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-.board-overlay p {
-  margin: 0;
-}
-.game__side {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-}
-.status-bar {
-  padding: 0.65rem 0.85rem;
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  border: 1px solid var(--border);
-}
-.status-bar--over {
-  border-color: var(--accent);
-}
-.status-bar__text {
-  margin: 0;
-  font-weight: 600;
-  color: var(--text-strong);
-}
-.rules-summary {
-  margin-top: 0.4rem;
-  font-size: 0.85rem;
-}
-.rules-summary summary {
-  cursor: pointer;
-  color: var(--text-muted);
-}
-.rules-summary__list {
-  margin-top: 0.4rem;
-}
-.status-bar__meta {
-  margin: 0.15rem 0 0;
-}
-.game__history {
-  flex: 1;
-  min-height: 10rem;
-}
-/* Side-by-side layout for everything that is not the compact (phone/portrait) layout. */
-@media (min-width: 760px) {
-  .game {
-    /* Board track: as large as the viewport height allows, never below a usable size. */
-    grid-template-columns: minmax(18rem, min(calc(100dvh - 14.5rem), 46rem)) 20rem;
-    justify-content: center;
-    align-items: start;
-  }
-  .game__board-column {
-    width: 100%;
-  }
-  .game__side {
-    position: sticky;
-    top: 1rem;
-    max-height: calc(100dvh - 6rem);
-  }
-}
-/* ---- Phones: full-screen game, no page scroll ------------------------------ */
-.game--compact {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  height: calc(100dvh - var(--header-total));
-  overflow: hidden;
-}
-.game--compact .game__notices {
-  position: absolute;
-  inset: auto 0.75rem calc(4.25rem + env(safe-area-inset-bottom, 0px)) 0.75rem;
-  z-index: 30;
-  box-shadow: var(--shadow-dialog);
-  border-radius: var(--radius-md);
-}
-/*
- * Player bars stay attached to the board, as in the Chess.com app: the board
- * is as large as the column allows after both bars, and any spare height is
- * shared above and below the whole group.
- */
-.game--compact .game__board-column {
-  --bar-h: 3rem;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  container-type: size;
-}
-.game--compact .game__board-column > :deep(.player) {
-  flex: none;
-  height: var(--bar-h);
-  min-height: 0;
-}
-.game--compact .game__board-box {
-  width: min(100cqw, 100cqh - 2 * var(--bar-h));
-  margin: 0 auto;
-}
-.game--compact .game__board-box :deep(.board) {
-  border-radius: 0;
-  box-shadow: none;
-  /* Every touch on the board belongs to the game, not to page scrolling. */
-  touch-action: none;
-}
-.game--compact .board-overlay {
-  border-radius: 0;
-}
-.status-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  min-height: 2rem;
-  height: 2rem;
-  padding: 0.2rem 0.75rem;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 0.85rem;
-}
-.status-line--over .status-line__text {
-  color: var(--accent-strong);
-}
-.status-line__text {
-  margin: 0;
-  overflow: hidden;
-  font-weight: 600;
-  color: var(--text-strong);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Short enough to fit the status line, so the board does not shift when browsing history. */
-.status-line__live {
-  min-height: 1.5rem;
-  padding: 0 0.7rem;
-  font-size: 0.8rem;
-  line-height: 1;
-}
-.status-line__meta {
-  flex: none;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-.toolbar {
-  display: flex;
-  justify-content: space-around;
-  padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-}
-.toolbar__button {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  min-width: 0;
-  min-height: 3.25rem;
-  padding: 0.35rem 0.25rem;
-  border: none;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.7rem;
-  cursor: pointer;
-}
-.toolbar__button .icon {
-  width: 1.35rem;
-  height: 1.35rem;
-}
-.toolbar__button:active:not(:disabled) {
-  background: var(--accent-soft);
-}
-.toolbar__button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.toolbar__button--accent {
-  color: var(--accent-strong);
-  font-weight: 600;
-}
-</style>

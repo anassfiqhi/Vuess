@@ -3,6 +3,21 @@
     <h1>Rules &amp; help</h1>
 
     <section class="card">
+      <h2>Ways to play</h2>
+      <ul>
+        <li><strong>Play in person:</strong> two players share this device.</li>
+        <li>
+          <strong>Computer:</strong> play Stockfish at levels 1 (Newcomer) to 8 (Master). Undo takes back your move
+          and the computer's reply together.
+        </li>
+        <li>
+          <strong>Online:</strong> create a game and send the link to a friend, or open a link you received. The
+          server checks every move and keeps the clocks. Reloading the page returns you to your game.
+        </li>
+      </ul>
+    </section>
+
+    <section class="card">
       <h2>Playing</h2>
       <ul>
         <li>Tap or click a piece, then a highlighted square. You can also drag pieces.</li>

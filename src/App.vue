@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+import { useComputerPlayer } from '@/features/chess/composables/useComputerPlayer'
 import { useGameRuntime } from '@/features/chess/composables/useGameRuntime'
 
 useGameRuntime()
+useComputerPlayer()
 const route = useRoute()
 </script>
 
@@ -21,6 +23,7 @@ const route = useRoute()
     </RouterLink>
     <nav class="app-nav" aria-label="Main">
       <RouterLink to="/" class="app-nav__link">Play</RouterLink>
+      <RouterLink to="/online" class="app-nav__link"><AppIcon name="globe" /><span>Online</span></RouterLink>
       <RouterLink to="/settings" class="app-nav__link"><AppIcon name="settings" /><span>Settings</span></RouterLink>
       <RouterLink to="/about" class="app-nav__link"><AppIcon name="info" /><span>Help</span></RouterLink>
     </nav>
