@@ -1,6 +1,6 @@
 # Vuess
 
-A local two-player chess game built with Vue 3, TypeScript, Pinia and chess.js. It includes per-game rules (Beginner, Casual, Strict or custom), clocks with increment, move history with position browsing, undo/redo, automatic saving, PGN import/export, and full keyboard and touch support.
+A chess game built with Vue 3, TypeScript, Pinia and chess.js. Play **in person** on one device, against the **computer** (Stockfish), or **online** against a friend through [vuess-server](../vuess-server). It includes per-game rules (Beginner, Casual, Strict or custom), clocks with increment, move history with position browsing, undo/redo, automatic saving, PGN import/export, and full keyboard and touch support.
 
 ## Getting started
 
@@ -11,15 +11,25 @@ pnpm install
 pnpm dev            # http://localhost:5173
 ```
 
+Online play needs [vuess-server](../vuess-server), a separate project expected next to this one:
+
+```sh
+pnpm --dir ../vuess-server install
+pnpm dev:server     # vuess-server on http://localhost:4310
+```
+
+Set `VITE_ONLINE_SERVER_URL` (for example in `.env.local`) when the server runs elsewhere.
+
 | Script | What it does |
 | --- | --- |
 | `pnpm dev` | Vite dev server |
+| `pnpm dev:server` | Start vuess-server from `../vuess-server` (for online play) |
 | `pnpm build` | Type-check, then production build to `dist/` |
 | `pnpm preview` | Serve the production build |
 | `pnpm type-check` | `vue-tsc` across app, tests and tooling configs |
 | `pnpm lint` / `pnpm lint:fix` | ESLint (Vue + TypeScript recommended rules) |
 | `pnpm test` | Vitest unit and component tests |
-| `pnpm test:e2e` | Playwright browser tests on desktop and mobile Chrome (builds first; run `pnpm exec playwright install chromium` once) |
+| `pnpm test:e2e` | Playwright browser tests on desktop and mobile Chrome. Builds first, and also builds and starts `../vuess-server` when present (online tests are skipped without it). Run `pnpm exec playwright install chromium` once. |
 | `pnpm check` | Type-check, lint, unit tests and build |
 
 ## Architecture
@@ -27,8 +37,9 @@ pnpm dev            # http://localhost:5173
 ```
 src/
   App.vue                       Shell: header, nav, <RouterView>; starts the game runtime
-  router/index.ts               /  /settings  /about  (+ catch-all → /)
-  views/                        GameView (orchestration), SettingsView, AboutView
+  router/index.ts               /  /online  /online/:gameId  /settings  /about  (+ catch-all → /)
+  views/                        GameView (local games), OnlineLobbyView, OnlineGameView, SettingsView, AboutView
+  composables/useGameLayout.ts  Phone/tablet full-screen layout switch and page lock (styles/game-layout.css)
   stores/settings.ts            Preferences (theme, sound, animation, coordinates, orientation)
   components/                   App-wide UI: BaseDialog, ConfirmDialog, AppIcon
   features/chess/
@@ -39,14 +50,21 @@ src/
     services/timeSource.ts      Injectable monotonic clock (performance.now)
     services/persistence.ts     Versioned save/load and validation of untrusted records
     services/storage.ts         localStorage access that never throws
-    stores/game.ts              The game store: move pipeline, clocks, undo/redo, results, PGN
+    services/engine/            Computer opponent: engine interface, Stockfish worker client, UCI helpers, levels
+    stores/game.ts              The game store: move pipeline, clocks, undo/redo, results, PGN, opponent
     composables/
       useBoardInteraction.ts    One move pipeline for tap, drag and keyboard
       useGameRuntime.ts         Restore on start, clock ticker, lifecycle saves
+      useComputerPlayer.ts      Plays the computer side; ignores replies that arrive after the game changed
       useSound.ts, useReducedMotion.ts
     components/                 ChessBoard, BoardSquare, ChessPiece, PlayerPanel, ChessClock,
                                 MoveHistory, GameControls, the dialogs, SettingsPanel
     assets/pieces.ts            Piece artwork (two-layer SVG paths: halo + body, coloured via CSS variables)
+  features/online/
+    protocol.ts                 Socket.IO message types (copy of vuess-server/src/protocol.ts)
+    services/connection.ts      Socket.IO client and request helper (acknowledgements with a timeout)
+    stores/online.ts            Online game state from the server, saved seats, the move awaiting confirmation
+    components/OnlineNotices.vue  Errors, reconnecting and draw offers
 ```
 
 ### Data flow
@@ -71,6 +89,29 @@ Tap, drag and keyboard all go through `useBoardInteraction`:
 7. Clear the interaction state; animate the move, play sound and announce it to screen readers.
 
 Moves are disabled while viewing an earlier position, while paused, and after the game ends.
+
+## Play modes
+
+Choose the mode in **New game**:
+
+- **Play in person:** two people on one device; everything described below under "Game policies".
+- **Computer:** play Stockfish at levels 1 (Newcomer) to 8 (Master). You choose your colour, the time control and the rules. Undo (when takebacks are on) takes back your move and the computer's reply together. Agreed draws are not offered against the computer.
+- **Online:** creates a game on vuess-server and shows an invite link to send to a friend. Also available from the **Online** page, which can join with a link or code.
+
+### Computer opponent
+
+- The engine is **Stockfish 19** (the lite, single-threaded WebAssembly build from the `stockfish` npm package, about 1.8 MB). It runs in a Web Worker, so the board never freezes while it thinks, and it is downloaded only when you play the computer.
+- Each level sets Stockfish's *Skill Level* (0–20), a search depth and a time cap (`services/engine/levels.ts`), so low levels play weaker moves yet still answer quickly.
+- Every engine request is tagged with the game's revision. If you undo, start a new game, pause or reload before the reply arrives, the request is cancelled and a late reply is ignored. Engine failures show an error with **Try again**.
+- **Licence:** Stockfish is GPL-3.0. Vuess loads it as a separate file at runtime; if you distribute the app, follow the GPL for the engine files (keep the licence and offer the source).
+
+### Online play
+
+- **The server decides everything:** move legality, whose turn it is, the clocks and results. Your move appears immediately and is taken back with a message if the server rejects it.
+- Online games use **Chess.com style** rules (no takebacks, automatic repetition and fifty-move draws). Draws are offered and accepted; your opponent moving instead of answering declines the offer.
+- Your seat is saved in this browser (`vuess.online.seats`), so reloading or reconnecting returns you to your side. Socket.IO reconnects automatically, and the game re-syncs from the server.
+- Opening a link to a full game lets you watch.
+- See vuess-server's README for the protocol, limits and hosting.
 
 ## Game policies
 
@@ -120,7 +161,7 @@ Each game stores a `GameRules` object, chosen in the New game dialog and fixed f
 
 ### Saving
 
-- Every accepted change, plus lifecycle checkpoints (tab hidden, page hide), saves to `localStorage["vuess.game"]` as `{ version: 4, savedAt, game }`. Older saves are upgraded on load: version 1 (before per-game rules) gets the Casual rules, version 2 (before the en passant rule) gets en passant on, and version 3 (before `rulesChoice`) gets the preset its rules match, or Customized rules. Each upgrade matches how those games were played. Preferences are saved separately under `vuess.settings`.
+- Every accepted change, plus lifecycle checkpoints (tab hidden, page hide), saves to `localStorage["vuess.game"]` as `{ version: 5, savedAt, game }`. Older saves are upgraded on load: version 1 (before per-game rules) gets the Casual rules, version 2 (before the en passant rule) gets en passant on, version 3 (before `rulesChoice`) gets the preset its rules match, or Customized rules, and version 4 (before computer games) is an in-person game. Each upgrade matches how those games were played. Preferences are saved separately under `vuess.settings`.
 - **Saved data is never trusted on load.** It is checked for shape, every move is replayed and its SAN compared, and the stored outcome is checked against the position. If loading fails (corrupt JSON, an unsupported version, illegal moves or an inconsistent result), the raw data is copied to `vuess.game.unreadable`, a fresh game starts, and a notice explains what happened.
 - Storage failures (quota, privacy mode) show a warning; play continues unsaved.
 
@@ -151,7 +192,10 @@ On phones and portrait tablets (narrower than 760px, or taller than wide), the g
 ## Testing
 
 - `src/features/chess/__tests__/`: rules integration (castling, en passant, promotion, endings, PGN), clock maths, the game store (turn enforcement, undo/redo, persistence and recovery, clock expiry, increments, hidden-tab elapsed time, pause on reload) using an injected fake time source, and board/interaction component tests (orientation, keyboard, drag, promotion and cancel).
-- `e2e/game.spec.ts`: checkmate plus reload/restore, promotion with cancel, drag-and-drop, keyboard play, history browsing, undo/redo, timed games pausing after reload, PGN round trip with a failed import, corrupted-save recovery, routing, and no horizontal overflow. Runs on desktop Chrome and a Pixel 7 profile.
+- `__tests__/computer.spec.ts`: UCI helpers and levels, the computer playing after you, stale replies ignored after undo, engine failure and retry, pausing, takebacks of both moves, and the version 4 to 5 save upgrade (with a fake engine).
+- `src/features/online/__tests__/`: invite links, and the online store against a fake socket: creating, rejoining with the saved seat, a move shown at once then confirmed or taken back, one join at a time, ignored out-of-date updates, clocks and an unreachable server.
+- `e2e/online.spec.ts` (needs vuess-server): two browsers play through an invite link, exchange moves, reload with the seat restored, and agree a draw; the New game dialog creates an online game.
+- `e2e/game.spec.ts`: the real Stockfish replying and undo taking back both moves; checkmate plus reload/restore, promotion with cancel, drag-and-drop, keyboard play, history browsing, undo/redo, timed games pausing after reload, PGN round trip with a failed import, corrupted-save recovery, routing, and no horizontal overflow. Runs on desktop Chrome and a Pixel 7 profile.
 
 ## Known shortcuts
 
@@ -168,9 +212,9 @@ On phones and portrait tablets (narrower than 760px, or taller than wide), the g
 Ordered by value and how well the current design already supports it.
 
 1. **Exact timeout adjudication.** Replace the simple "lone king or one minor piece" check with a search for whether the side can still deliver mate, at least under Strict rules. Benefit: correct results in rare endgames. Trade-off: a small search on every timeout. Files: `services/chessRules.ts` (`lacksMatingMaterial`), `stores/game.ts` (`checkTimeout`).
-2. **Computer opponent (Web Worker).** Add `features/chess/services/opponent.ts` with an interface like `requestMove(record snapshot, revision, signal) → Promise<MoveInput>`, backed by a worker running an engine (for example Stockfish WASM). On reply, check that `record.revision` is unchanged and submit through `game.tryMove`. Cancel with `AbortController` on undo, restart or navigation. The store's `revision` field already exists for this. Trade-off: a large WASM download (lazy-load it), plus mobile CPU use. Files: new service and worker, `GameSetupDialog.vue` (opponent choice), `GameView.vue`.
+2. **Game review with the engine.** Reuse the Stockfish worker to evaluate each position after a game (evaluation bar, best move, mistake labels) on the history view. Files: `services/engine/` (an `analyse` call), `MoveHistory.vue`, a new review panel.
 3. **Analysis board.** A read-only replay model built with `buildPosition(initialFen, moves.slice(0, n))`, kept separate from the active game. Optionally add engine evaluation through the same worker. Files: new `views/AnalysisView.vue` route, a new `useReplay` composable, reusing `ChessBoard` and `MoveHistory`.
-4. **Online play.** Add a transport interface: `submitMove({ gameId, expectedRevision, idempotencyKey, move })` and `onSnapshot(record)`. The server owns legality, player identity, clocks and results. The client becomes a viewer of the server's records, using `restoreGame`-style validation, and a full snapshot is fetched on reconnect. `GameRecord` already carries `revision`, and moves are plain data. Trade-off: needs a backend, authentication and clock synchronisation. Files: new `services/transport.ts`, and a mode switch in `stores/game.ts` that routes `tryMove` through the transport instead of committing locally.
+4. **Online: matchmaking, accounts and persistence.** Random pairing by time control, player accounts and ratings, and storing games in a database so a server restart does not end them. Files: mostly vuess-server (`game/registry.ts`, new routes), plus a lobby list in `OnlineLobbyView.vue`.
 5. **Puzzles and custom starting positions.** `createRecord(setup, initialFen)` already accepts any FEN, and the rules layer validates it. Add a FEN editor, plus a goal checker (for example "mate in N") that runs on `position.ruleOutcome`. Files: new `features/puzzles/`, and `GameSetupDialog.vue` (FEN input).
 6. **Saved games library.** Move from a single localStorage key to IndexedDB keyed by `record.id`, with a list and resume view. Files: `services/persistence.ts`, a new view.
 7. **Localisation and more themes.** Pull UI strings into message files (`outcomeText.ts` already centralises the result wording). Themes only need new CSS custom properties.
