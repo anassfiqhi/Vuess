@@ -12,6 +12,7 @@ import {
   type ClockCheckpoint,
   type GameRecord,
   type GameRules,
+  type Opponent,
   type RulesChoice,
   type MoveInput,
   type Outcome,
@@ -30,6 +31,7 @@ export interface GameSetup {
   timeControl: TimeControl | null
   rulesChoice: RulesChoice
   rules: GameRules
+  opponent: Opponent
 }
 
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -54,6 +56,7 @@ export function createRecord(setup: GameSetup, initialFen = STARTING_FEN): GameR
     timeControl: setup.timeControl,
     rulesChoice: setup.rulesChoice,
     rules: { ...setup.rules },
+    opponent: { ...setup.opponent },
     clocks: [initialCheckpoint(setup.timeControl)],
     turnElapsedMs: 0,
     finalClock: null,
@@ -67,6 +70,7 @@ const DEFAULT_SETUP: GameSetup = {
   timeControl: null,
   rulesChoice: DEFAULT_PRESET,
   rules: DEFAULT_RULES,
+  opponent: { kind: 'person' },
 }
 
 export { isRuleOutcome }
@@ -116,6 +120,13 @@ export const useGameStore = defineStore('game', () => {
     () => !isOver.value && rules.value.drawClaims === 'claim' && position.value.drawClaim !== null,
   )
   const canMove = computed(() => !isOver.value && !isPaused.value)
+  const opponent = computed(() => record.value.opponent)
+  /** The colour the computer plays, or null in a game played in person. */
+  const computerColor = computed(() => (opponent.value.kind === 'computer' ? opponent.value.color : null))
+  /** True when the live position is waiting for the computer to move. */
+  const isComputerTurn = computed(
+    () => computerColor.value !== null && canMove.value && position.value.turn === computerColor.value,
+  )
 
   const clocks = computed<ClockCheckpoint | null>(() => {
     const r = record.value
@@ -294,14 +305,22 @@ export const useGameStore = defineStore('game', () => {
   function undoMove(): Result<true> {
     if (!rules.value.takebacks) return fail('Takebacks are off in this game.')
     if (!canUndo.value) return fail('Nothing to undo.')
-    moveCursor(record.value.cursor - 1)
+    // Against the computer, take back to the player's turn: the computer's
+    // reply and the player's move go together.
+    let target = record.value.cursor - 1
+    while (target > 0 && record.value.moves[target]!.color === computerColor.value) target--
+    moveCursor(target)
     return ok(true)
   }
 
   function redoMove(): Result<true> {
     if (!rules.value.takebacks) return fail('Takebacks are off in this game.')
     if (!canRedo.value) return fail('Nothing to redo.')
-    moveCursor(record.value.cursor + 1)
+    // Against the computer, redo the player's move and the computer's reply together.
+    let target = record.value.cursor + 1
+    const moves = record.value.moves
+    while (target < moves.length && moves[target]!.color === computerColor.value) target++
+    moveCursor(target)
     return ok(true)
   }
 
@@ -394,6 +413,7 @@ export const useGameStore = defineStore('game', () => {
         timeControl: null,
         rulesChoice: DEFAULT_PRESET,
         rules: DEFAULT_RULES,
+        opponent: { kind: 'person' },
       },
       initialFen,
     )
@@ -424,6 +444,9 @@ export const useGameStore = defineStore('game', () => {
     record,
     restoreNotice,
     storageWarning,
+    opponent,
+    computerColor,
+    isComputerTurn,
     position,
     appliedMoves,
     outcome,

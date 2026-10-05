@@ -4,7 +4,10 @@ import { DEFAULT_RULES, RULE_PRESETS } from '../services/gameRules'
 import { CORRUPT_BACKUP_KEY, GAME_STORAGE_KEY } from '../services/persistence'
 import { setTimeSource } from '../services/timeSource'
 import { useGameStore, type GameSetup } from '../stores/game'
+import { GAME_RECORD_VERSION } from '../types'
 import { fakeClock, mv } from './helpers'
+
+const PERSON = { kind: 'person' } as const
 
 let clock: ReturnType<typeof fakeClock>
 let restoreTime: () => void
@@ -27,7 +30,7 @@ function play(store: ReturnType<typeof useGameStore>, ...moves: string[]) {
 /** A store whose current game allows takebacks (the default Chess.com-style rules do not). */
 function casualStore() {
   const store = useGameStore()
-  store.startGame({ whiteName: '', blackName: '', timeControl: null, rulesChoice: 'casual', rules: RULE_PRESETS.casual.rules })
+  store.startGame({ opponent: PERSON, whiteName: '', blackName: '', timeControl: null, rulesChoice: 'casual', rules: RULE_PRESETS.casual.rules })
   return store
 }
 
@@ -81,7 +84,7 @@ describe('move pipeline', () => {
     store.resign('b')
     expect(store.outcome).toEqual({ result: '1-0', winner: 'w', reason: 'resignation' })
     expect(store.canUndo).toBe(false)
-    store.startGame({ whiteName: 'A', blackName: 'B', timeControl: null, rulesChoice: 'chesscom', rules: DEFAULT_RULES })
+    store.startGame({ opponent: PERSON, whiteName: 'A', blackName: 'B', timeControl: null, rulesChoice: 'chesscom', rules: DEFAULT_RULES })
     store.agreeDraw()
     expect(store.outcome?.reason).toBe('agreement')
   })
@@ -126,7 +129,7 @@ describe('undo and redo', () => {
 describe('persistence', () => {
   it('saves and restores history, redo stack and explicit outcomes', () => {
     const store = useGameStore()
-    store.startGame({ whiteName: 'Ada', blackName: 'Grace', timeControl: null, rulesChoice: 'casual', rules: RULE_PRESETS.casual.rules })
+    store.startGame({ opponent: PERSON, whiteName: 'Ada', blackName: 'Grace', timeControl: null, rulesChoice: 'casual', rules: RULE_PRESETS.casual.rules })
     play(store, 'e2e4', 'e7e5', 'g1f3')
     store.undoMove()
     store.resign('w')
@@ -195,6 +198,7 @@ describe('persistence', () => {
 
 describe('clocks', () => {
   const blitz: GameSetup = {
+    opponent: PERSON,
     whiteName: '',
     blackName: '',
     timeControl: { initialMs: 60_000, incrementMs: 2_000 },
@@ -299,7 +303,7 @@ describe('clocks', () => {
 describe('rules', () => {
   const shuffle = ['g1f3', 'g8f6', 'f3g1', 'f6g8']
   const start = (store: ReturnType<typeof useGameStore>, preset: keyof typeof RULE_PRESETS) =>
-    store.startGame({ whiteName: '', blackName: '', timeControl: null, rulesChoice: preset, rules: RULE_PRESETS[preset].rules })
+    store.startGame({ opponent: PERSON, whiteName: '', blackName: '', timeControl: null, rulesChoice: preset, rules: RULE_PRESETS[preset].rules })
 
   it('starts with Chess.com-style rules by default', () => {
     const store = useGameStore()
@@ -352,7 +356,7 @@ describe('rules', () => {
   it('copies the rules into the game so later edits to the input do not change them', () => {
     const store = useGameStore()
     const rules = { ...RULE_PRESETS.casual.rules }
-    store.startGame({ whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules })
+    store.startGame({ opponent: PERSON, whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules })
     rules.takebacks = false
     expect(store.rules.takebacks).toBe(true)
   })
@@ -367,7 +371,7 @@ describe('rules', () => {
     localStorage.setItem(GAME_STORAGE_KEY, JSON.stringify(saved))
     const restored = freshStore()
     expect(restored.restoreNotice).toBeNull()
-    expect(restored.record.version).toBe(4)
+    expect(restored.record.version).toBe(GAME_RECORD_VERSION)
     expect(restored.rulesChoice).toBe('casual')
     expect(restored.rules).toEqual(RULE_PRESETS.casual.rules)
     expect(restored.appliedMoves).toHaveLength(1)
@@ -388,7 +392,7 @@ describe('rules', () => {
 
   it('rejects en passant when the rule is off, and keeps it off after a reload', () => {
     const store = useGameStore()
-    store.startGame({ whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules: { ...DEFAULT_RULES, enPassant: false } })
+    store.startGame({ opponent: PERSON, whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules: { ...DEFAULT_RULES, enPassant: false } })
     play(store, 'e2e4', 'a7a6', 'e4e5', 'd7d5')
     expect(store.tryMove(mv('e5d6'))).toEqual({ ok: false, error: 'That move is not legal.' })
     expect(store.getLegalMoves('e5').map((m) => m.to)).toEqual(['e6'])
@@ -399,7 +403,7 @@ describe('rules', () => {
 
   it('upgrades version 3 saves by naming the rule set from the rules', () => {
     const store = useGameStore()
-    store.startGame({ whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules: RULE_PRESETS.strict.rules })
+    store.startGame({ opponent: PERSON, whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules: RULE_PRESETS.strict.rules })
     play(store, 'e2e4')
     const saved = JSON.parse(localStorage.getItem(GAME_STORAGE_KEY)!)
     delete saved.game.rulesChoice
@@ -411,7 +415,7 @@ describe('rules', () => {
 
   it('keeps the chosen rule set name even when custom rules match a preset', () => {
     const store = useGameStore()
-    store.startGame({ whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules: DEFAULT_RULES })
+    store.startGame({ opponent: PERSON, whiteName: '', blackName: '', timeControl: null, rulesChoice: 'custom', rules: DEFAULT_RULES })
     expect(freshStore().rulesChoice).toBe('custom')
   })
 

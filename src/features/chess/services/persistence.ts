@@ -17,6 +17,7 @@ import {
   ok,
   type ClockCheckpoint,
   type GameRecord,
+  type Opponent,
   type Outcome,
   type RecordedMove,
   type Result,
@@ -53,6 +54,12 @@ const REASONS: readonly string[] = [
   'timeout-vs-insufficient-material',
   'recorded-result',
 ]
+
+function isOpponent(v: unknown): v is Opponent {
+  if (!isObject(v)) return false
+  if (v.kind === 'person') return true
+  return v.kind === 'computer' && isColor(v.color) && Number.isInteger(v.level) && (v.level as number) >= 1 && (v.level as number) <= 8
+}
 
 function isMove(v: unknown): v is RecordedMove {
   return (
@@ -112,6 +119,7 @@ export function validateRecord(value: unknown): Result<GameRecord> {
     r.turnElapsedMs >= 0 &&
     isRules(r.rules) &&
     isRulesChoice(r.rulesChoice) &&
+    isOpponent(r.opponent) &&
     (r.finalClock === null || isCheckpoint(r.finalClock)) &&
     (r.outcome === null || isOutcome(r.outcome))
   if (!shapeOk) return fail('The saved game is missing information or contains invalid values.')
@@ -169,7 +177,8 @@ export function loadGame(): LoadResult {
  * Upgrades older saves step by step:
  * v1 → v2 added per-game rules (old games behaved like Casual);
  * v2 → v3 added the en passant rule (always allowed before);
- * v3 → v4 records which rule set was chosen (inferred from the rules).
+ * v3 → v4 records which rule set was chosen (inferred from the rules);
+ * v4 → v5 records the opponent (every earlier game was played in person).
  */
 function migrate(game: unknown): unknown {
   if (!isObject(game)) return game
@@ -181,6 +190,7 @@ function migrate(game: unknown): unknown {
   if (current.version === 3 && isRules(current.rules)) {
     current = { ...current, version: 4, rulesChoice: matchPreset(current.rules) ?? 'custom' }
   }
+  if (current.version === 4) current = { ...current, version: 5, opponent: { kind: 'person' } }
   return current
 }
 

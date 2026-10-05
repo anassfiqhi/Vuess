@@ -22,6 +22,7 @@ function resetEverything(): void {
     timeControl: null,
     rulesChoice: DEFAULT_PRESET,
     rules: DEFAULT_RULES,
+    opponent: { kind: 'person' },
   })
   confirmReset.value = false
   resetDone.value = 'Saved game and preferences were cleared.'

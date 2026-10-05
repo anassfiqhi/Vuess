@@ -95,7 +95,13 @@ export interface GameRules {
   rotateBoard: boolean
 }
 
-export const GAME_RECORD_VERSION = 4
+/** Engine strength from 1 (weakest) to 8 (strongest). */
+export type EngineLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+
+/** Who plays the other side of a local game. */
+export type Opponent = { kind: 'person' } | { kind: 'computer'; color: PieceColor; level: EngineLevel }
+
+export const GAME_RECORD_VERSION = 5
 
 /**
  * The authoritative, serializable game. Everything visible on the board is
@@ -118,6 +124,7 @@ export interface GameRecord {
   /** Which rule set was chosen; shown as the game's rules name. */
   rulesChoice: RulesChoice
   rules: GameRules
+  opponent: Opponent
   /** `clocks[i]` is the remaining time after `i` moves; length is `moves.length + 1`. */
   clocks: ClockCheckpoint[]
   /**
